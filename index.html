@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scratch_art — arte gerada por movimento</title>
+<style>
+  :root{
+    --bg: #121212;
+    --panel: #1a1a1a;
+    --groove: #2a2a2a;
+    --paper: #f7f5f0;
+    --p1: #ff4d4d;
+    --p2: #4dd2ff;
+    --text: #e8e6df;
+    --muted: #8a8780;
+    --led: #7dff9a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:'IBM Plex Mono', ui-monospace, Menlo, monospace;}
+  h1,h2,h3{font-family:'Barlow Condensed', Oswald, 'Arial Narrow', sans-serif;
+    text-transform:uppercase; letter-spacing:0.04em; margin:0;}
+  .app{display:flex; height:100vh; overflow:hidden;}
+
+  /* ---------- SIDEBAR ---------- */
+  .side{
+    width:300px; min-width:300px; background:var(--panel);
+    padding:20px 18px; overflow-y:auto; border-right:1px solid #000;
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .platter{
+    width:34px;height:34px;border-radius:50%;
+    background:repeating-radial-gradient(circle at center, #050505 0 2px, #222 2px 4px);
+    border:2px solid var(--groove); position:relative; flex:none;
+    animation: spin 6s linear infinite;
+  }
+  .platter::after{content:"";position:absolute;inset:13px;border-radius:50%;background:var(--paper);}
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .brand h1{font-size:20px; line-height:1;}
+  .brand span{display:block; font-size:10px; color:var(--muted); letter-spacing:.12em; font-family:'IBM Plex Mono',monospace; text-transform:none; margin-top:2px;}
+
+  .card{background:#151515; border:1px solid #000; border-radius:6px; padding:14px;}
+  .card h3{font-size:12px; color:var(--muted); margin-bottom:10px; letter-spacing:.1em;}
+
+  button{
+    font-family:inherit; background:var(--groove); color:var(--text);
+    border:1px solid #000; border-radius:4px; padding:9px 10px; cursor:pointer;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase;
+    transition:background .15s, transform .05s;
+  }
+  button:hover{background:#3a3a3a;}
+  button:active{transform:scale(.97);}
+  button.primary{background:var(--led); color:#06210f; font-weight:700;}
+  button.primary:hover{background:#9dffb5;}
+  button.ghost{background:transparent;}
+  .row{display:flex; gap:8px; flex-wrap:wrap;}
+  .row button{flex:1;}
+
+  label{font-size:11px; color:var(--muted); display:block; margin-bottom:4px; letter-spacing:.05em;}
+  input[type=range]{width:100%; accent-color:var(--led);}
+  select{
+    width:100%; background:#0f0f0f; color:var(--text); border:1px solid #000;
+    padding:7px; border-radius:4px; font-family:inherit; font-size:12px;
+  }
+
+  .calib-btn{width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .swatch{width:16px;height:16px;border-radius:50%; border:2px solid #fff; box-shadow:0 0 6px #0006;}
+  .calib-btn.active{outline:2px solid var(--led); outline-offset:1px;}
+
+  .preview-wrap{position:relative; border-radius:4px; overflow:hidden; background:#000; border:1px solid var(--groove);}
+  video{width:100%; display:block; transform:scaleX(1);}
+  #overlay{position:absolute; inset:0; width:100%; height:100%;}
+
+  .status{font-size:11px; color:var(--muted); display:flex; justify-content:space-between;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%; margin-right:6px;}
+  .dot.off{background:#553; }
+  .dot.on{background:var(--led); box-shadow:0 0 6px var(--led);}
+
+  .hint{font-size:10.5px; color:var(--muted); line-height:1.5;}
+
+  /* ---------- MAIN CANVAS AREA ---------- */
+  .main{flex:1; position:relative; background:var(--paper);}
+  #art{width:100%; height:100%; display:block; cursor:crosshair;}
+  .topbar{
+    position:absolute; top:0; left:0; right:0; padding:12px 18px;
+    display:flex; justify-content:space-between; align-items:center;
+    background:linear-gradient(to bottom, rgba(0,0,0,.06), transparent);
+    pointer-events:none; color:#00000088; font-size:11px; letter-spacing:.08em;
+  }
+  .topbar b{color:#000000aa;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="side">
+    <div class="brand">
+      <div class="platter"></div>
+      <div>
+        <h1>Scratch_art</h1>
+        <span>câmera → cor → movimento → giz</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>01 · Câmera</h3>
+      <div class="preview-wrap">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div style="height:8px"></div>
+      <div class="row">
+        <button id="btnStart" class="primary">Iniciar câmera</button>
+      </div>
+      <div style="height:8px"></div>
+      <div class="status">
+        <span><span class="dot off" id="dotCam"></span>câmera</span>
+        <span><span class="dot off" id="dotP1"></span>ponto 1</span>
+        <span><span class="dot off" id="dotP2"></span>ponto 2</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>02 · Calibrar cores</h3>
+      <div class="hint">Clique num botão e depois clique, na imagem da câmera, sobre o adesivo/marcador colorido correspondente (um no disco, outro no botão do mixer).</div>
+      <div style="height:10px"></div>
+      <button id="calib1" class="calib-btn">
+        <span>Calibrar ponto 1 (disco)</span>
+        <span class="swatch" id="sw1" style="background:var(--p1)"></span>
+      </button>
+      <div style="height:8px"></div>
+      <button id="calib2" class="calib-btn">
+        <span>Calibrar ponto 2 (mixer)</span>
+        <span class="swatch" id="sw2" style="background:var(--p2)"></span>
+      </button>
+      <div style="height:12px"></div>
+      <label>Sensibilidade de cor (tolerância de matiz)</label>
+      <input type="range" id="tol" min="5" max="60" value="22">
+    </div>
+
+    <div class="card">
+      <h3>03 · Modo de desenho</h3>
+      <select id="mode">
+        <option value="chalk">Giz — textura orgânica</option>
+        <option value="trail">Traço — linha entre os pontos</option>
+        <option value="particles">Partículas — jorro pela velocidade</option>
+        <option value="mandala">Mandala — espelhamento radial</option>
+      </select>
+      <div style="height:10px"></div>
+      <label>Espessura / intensidade</label>
+      <input type="range" id="thick" min="1" max="10" value="4">
+      <div style="height:8px"></div>
+      <label>Persistência do rastro (0 = permanente)</label>
+      <input type="range" id="fade" min="0" max="30" value="4">
+    </div>
+
+    <div class="card">
+      <h3>04 · Tela</h3>
+      <div class="row">
+        <button id="btnClear">Limpar tela</button>
+        <button id="btnSave">Salvar PNG</button>
+      </div>
+      <div style="height:8px"></div>
+      <div class="row">
+        <button id="btnPause">Pausar desenho</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      Dica: cole dois pequenos adesivos ou fitas de cor bem saturada e diferente entre si — uma no disco de vinil, outra no botão/fader do mixer que você move. Cores muito parecidas com o fundo do ambiente reduzem a precisão.
+      <br><br>
+      Importante: acesso à câmera exige HTTPS ou <code>localhost</code>. Se abrir este arquivo direto (file://), o navegador pode bloquear a câmera — nesse caso rode um servidor local, ex.: <code>python3 -m http.server</code> e abra via <code>http://localhost:8000</code>.
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar"><span>tela em branco · <b>Scratch_art</b></span><span id="fpsTag">0 fps</span></div>
+    <canvas id="art"></canvas>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const octx = overlay.getContext('2d');
+  const art = document.getElementById('art');
+  const actx = art.getContext('2d');
+
+  const btnStart = document.getElementById('btnStart');
+  const calib1 = document.getElementById('calib1');
+  const calib2 = document.getElementById('calib2');
+  const sw1 = document.getElementById('sw1');
+  const sw2 = document.getElementById('sw2');
+  const tolEl = document.getElementById('tol');
+  const modeEl = document.getElementById('mode');
+  const thickEl = document.getElementById('thick');
+  const fadeEl = document.getElementById('fade');
+  const btnClear = document.getElementById('btnClear');
+  const btnSave = document.getElementById('btnSave');
+  const btnPause = document.getElementById('btnPause');
+  const dotCam = document.getElementById('dotCam');
+  const dotP1 = document.getElementById('dotP1');
+  const dotP2 = document.getElementById('dotP2');
+  const fpsTag = document.getElementById('fpsTag');
+
+  let calibrating = null; // 1, 2, or null
+  let target1 = {h:355, s:0.6, v:0.6, set:true};  // default reddish
+  let target2 = {h:195, s:0.6, v:0.6, set:true};  // default blueish
+  let paused = false;
+
+  // processing (downscaled) canvas
+  const proc = document.createElement('canvas');
+  const pctx = proc.getContext('2d', {willReadFrequently:true});
+  const PW = 160; let PH = 120;
+
+  function resizeCanvases(){
+    art.width = art.clientWidth;
+    art.height = art.clientHeight;
+    actx.fillStyle = '#f7f5f0';
+    actx.fillRect(0,0,art.width,art.height);
+    overlay.width = overlay.clientWidth;
+    overlay.height = overlay.clientHeight;
+  }
+  window.addEventListener('resize', resizeCanvases);
+
+  function rgbToHsv(r,g,b){
+    r/=255; g/=255; b/=255;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    let h, s, v = max;
+    const d = max-min;
+    s = max===0 ? 0 : d/max;
+    if(d===0){ h=0; }
+    else if(max===r){ h = 60*(((g-b)/d)%6); }
+    else if(max===g){ h = 60*((b-r)/d+2); }
+    else { h = 60*((r-g)/d+4); }
+    if(h<0) h+=360;
+    return {h,s,v};
+  }
+  function hueDist(a,b){
+    let d = Math.abs(a-b)%360;
+    return d>180 ? 360-d : d;
+  }
+
+  async function startCamera(){
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+      video.srcObject = stream;
+      await video.play();
+      dotCam.className = 'dot on';
+      btnStart.textContent = 'Câmera ativa';
+      resizeCanvases();
+      requestAnimationFrame(loop);
+    }catch(err){
+      alert('Não foi possível acessar a câmera: ' + err.message + '\n\nSe você abriu este arquivo direto do disco (file://), o navegador bloqueia a câmera. Rode um servidor local (ex: python3 -m http.server) e acesse via http://localhost.');
+    }
+  }
+  btnStart.addEventListener('click', startCamera);
+
+  calib1.addEventListener('click', ()=>{
+    calibrating = calibrating===1 ? null : 1;
+    calib1.classList.toggle('active', calibrating===1);
+    calib2.classList.remove('active');
+  });
+  calib2.addEventListener('click', ()=>{
+    calibrating = calibrating===2 ? null : 2;
+    calib2.classList.toggle('active', calibrating===2);
+    calib1.classList.remove('active');
+  });
+
+  overlay.addEventListener('click', (e)=>{
+    if(!calibrating || !video.videoWidth) return;
+    const rect = overlay.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    // sample from the small proc canvas for consistency
+    const px = Math.min(PW-1, Math.max(0, Math.floor(x*PW)));
+    const py = Math.min(PH-1, Math.max(0, Math.floor(y*PH)));
+    const data = pctx.getImageData(px, py, 1, 1).data;
+    const hsv = rgbToHsv(data[0], data[1], data[2]);
+    const swatchColor = `rgb(${data[0]},${data[1]},${data[2]})`;
+    if(calibrating===1){
+      target1 = {...hsv, set:true};
+      sw1.style.background = swatchColor;
+    } else {
+      target2 = {...hsv, set:true};
+      sw2.style.background = swatchColor;
+    }
+    calibrating = null;
+    calib1.classList.remove('active');
+    calib2.classList.remove('active');
+  });
+
+  btnClear.addEventListener('click', ()=>{
+    actx.fillStyle = '#f7f5f0';
+    actx.fillRect(0,0,art.width,art.height);
+    lastMidChalk = null;
+  });
+  btnSave.addEventListener('click', ()=>{
+    const link = document.createElement('a');
+    link.download = 'toca-traco-' + Date.now() + '.png';
+    link.href = art.toDataURL('image/png');
+    link.click();
+  });
+  btnPause.addEventListener('click', ()=>{
+    paused = !paused;
+    btnPause.textContent = paused ? 'Retomar desenho' : 'Pausar desenho';
+  });
+
+  // detection state
+  let last1 = null, last2 = null;
+  let vel1 = {x:0,y:0}, vel2 = {x:0,y:0};
+  let hueAngle = 0;
+  let lastMidChalk = null;
+
+  function findBlob(imgData, target, tol){
+    const d = imgData.data;
+    let sx=0, sy=0, count=0;
+    const w = imgData.width, h = imgData.height;
+    // sample every pixel of the small proc frame (cheap: 160x120)
+    for(let y=0; y<h; y+=1){
+      for(let x=0; x<w; x+=1){
+        const i = (y*w+x)*4;
+        const r=d[i], g=d[i+1], b=d[i+2];
+        const hsv = rgbToHsv(r,g,b);
+        if(hsv.s < 0.35 || hsv.v < 0.22) continue; // ignore dull/dark pixels
+        if(hueDist(hsv.h, target.h) <= tol){
+          sx += x; sy += y; count++;
+        }
+      }
+    }
+    if(count < 4) return null;
+    return {x: sx/count/w, y: sy/count/h, count};
+  }
+
+  function drawOverlayMarker(pt, color){
+    if(!pt) return;
+    const x = pt.x * overlay.width;
+    const y = pt.y * overlay.height;
+    octx.strokeStyle = color;
+    octx.lineWidth = 2;
+    octx.beginPath();
+    octx.arc(x,y,10,0,Math.PI*2);
+    octx.stroke();
+    octx.beginPath();
+    octx.moveTo(x-14,y); octx.lineTo(x+14,y);
+    octx.moveTo(x,y-14); octx.lineTo(x,y+14);
+    octx.stroke();
+  }
+
+  let frames=0, lastFpsT=performance.now();
+
+  function loop(){
+    if(video.readyState >= 2 && video.videoWidth){
+      PH = Math.round(PW * video.videoHeight / video.videoWidth);
+      proc.width = PW; proc.height = PH;
+      pctx.drawImage(video, 0,0, PW, PH);
+      overlay.width = overlay.clientWidth; overlay.height = overlay.clientHeight;
+      octx.clearRect(0,0,overlay.width, overlay.height);
+
+      const frame = pctx.getImageData(0,0,PW,PH);
+      const tol = parseFloat(tolEl.value);
+      const p1 = findBlob(frame, target1, tol);
+      const p2 = findBlob(frame, target2, tol);
+
+      dotP1.className = 'dot ' + (p1 ? 'on' : 'off');
+      dotP2.className = 'dot ' + (p2 ? 'on' : 'off');
+
+      drawOverlayMarker(p1, 'var(--p1)'.replace('var(--p1)', getComputedStyle(document.documentElement).getPropertyValue('--p1')));
+      drawOverlayMarker(p2, getComputedStyle(document.documentElement).getPropertyValue('--p2'));
+
+      if(p1){ vel1 = {x: p1.x-(last1?last1.x:p1.x), y: p1.y-(last1?last1.y:p1.y)}; last1 = p1; }
+      if(p2){ vel2 = {x: p2.x-(last2?last2.x:p2.x), y: p2.y-(last2?last2.y:p2.y)}; last2 = p2; }
+
+      if(!paused && last1 && last2){
+        renderArt(last1, last2, vel1, vel2);
+      }
+    }
+    frames++;
+    const now = performance.now();
+    if(now-lastFpsT > 500){
+      fpsTag.textContent = Math.round(frames/((now-lastFpsT)/1000)) + ' fps';
+      frames=0; lastFpsT = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function toCanvasXY(pt){
+    return { x: pt.x*art.width, y: pt.y*art.height };
+  }
+
+  function drawChalkStroke(x1, y1, x2, y2, baseWidth, hue){
+    const dist = Math.hypot(x2-x1, y2-y1);
+    const steps = Math.max(1, Math.min(60, Math.ceil(dist/2)));
+    const nx = -(y2-y1), ny = (x2-x1);
+    const nl = Math.hypot(nx,ny) || 1;
+    const ux = nx/nl, uy = ny/nl;
+    for(let s=0; s<=steps; s++){
+      const t = s/steps;
+      const cx = x1 + (x2-x1)*t;
+      const cy = y1 + (y2-y1)*t;
+      const grains = 5 + Math.floor(Math.random()*4);
+      for(let g=0; g<grains; g++){
+        const off = (Math.random()-0.5) * baseWidth * 1.3;
+        const gx = cx + ux*off + (Math.random()-0.5)*1.4;
+        const gy = cy + uy*off + (Math.random()-0.5)*1.4;
+        const alpha = 0.04 + Math.random()*0.14;
+        const size = Math.max(0.5, baseWidth*0.14 + Math.random()*baseWidth*0.22);
+        const hueJ = hue + (Math.random()-0.5)*24;
+        const light = 30 + Math.random()*28;
+        actx.fillStyle = `hsla(${hueJ}, 55%, ${light}%, ${alpha})`;
+        actx.beginPath();
+        actx.arc(gx, gy, size, 0, Math.PI*2);
+        actx.fill();
+      }
+    }
+  }
+
+  function renderArt(pt1, pt2, v1, v2){
+    const mode = modeEl.value;
+    const thick = parseFloat(thickEl.value);
+    const fade = parseFloat(fadeEl.value);
+
+    if(fade > 0){
+      actx.fillStyle = `rgba(247,245,240,${fade/300})`;
+      actx.fillRect(0,0,art.width,art.height);
+    }
+
+    const a = toCanvasXY(pt1), b = toCanvasXY(pt2);
+    const dx = b.x-a.x, dy = b.y-a.y;
+    const dist = Math.hypot(dx,dy);
+    const angle = Math.atan2(dy,dx);
+    hueAngle = (hueAngle + 1.2) % 360;
+    const speed = Math.hypot(v1.x,v1.y)+Math.hypot(v2.x,v2.y);
+    const hue = (angle*180/Math.PI + 360) % 360;
+
+    if(mode === 'chalk'){
+      const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+      if(!lastMidChalk) lastMidChalk = {x:mx, y:my};
+      const baseWidth = Math.max(5, thick*4 + speed*700);
+      drawChalkStroke(lastMidChalk.x, lastMidChalk.y, mx, my, baseWidth, hue);
+      lastMidChalk = {x:mx, y:my};
+
+    } else if(mode === 'trail'){
+      actx.strokeStyle = `hsl(${hue}, 70%, 45%)`;
+      actx.lineWidth = Math.max(1, thick + speed*400);
+      actx.lineCap = 'round';
+      actx.beginPath();
+      actx.moveTo(a.x,a.y);
+      actx.lineTo(b.x,b.y);
+      actx.stroke();
+      // midpoint dot pulsing with speed
+      const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+      actx.fillStyle = `hsl(${hue}, 85%, 55%)`;
+      actx.beginPath();
+      actx.arc(mx,my, Math.max(1,thick*0.6 + speed*300), 0, Math.PI*2);
+      actx.fill();
+
+    } else if(mode === 'particles'){
+      const spawn1 = 3 + Math.min(20, Math.hypot(v1.x,v1.y)*600);
+      const spawn2 = 3 + Math.min(20, Math.hypot(v2.x,v2.y)*600);
+      for(let i=0;i<spawn1;i++){
+        const jitter = (Math.random()-0.5)*40;
+        actx.fillStyle = `hsla(${hue+180}, 80%, 55%, 0.8)`;
+        actx.beginPath();
+        actx.arc(a.x + v1.x*art.width*4 + jitter, a.y + v1.y*art.height*4 + jitter, thick*0.6+Math.random()*thick, 0, Math.PI*2);
+        actx.fill();
+      }
+      for(let i=0;i<spawn2;i++){
+        const jitter = (Math.random()-0.5)*40;
+        actx.fillStyle = `hsla(${hue}, 80%, 45%, 0.8)`;
+        actx.beginPath();
+        actx.arc(b.x + v2.x*art.width*4 + jitter, b.y + v2.y*art.height*4 + jitter, thick*0.6+Math.random()*thick, 0, Math.PI*2);
+        actx.fill();
+      }
+
+    } else if(mode === 'mandala'){
+      const cx = art.width/2, cy = art.height/2;
+      const segs = 8;
+      const r = Math.min(dist*1.5, Math.hypot(art.width,art.height)/2);
+      actx.strokeStyle = `hsl(${hue}, 65%, 45%)`;
+      actx.lineWidth = Math.max(1, thick*0.7 + speed*300);
+      for(let i=0;i<segs;i++){
+        const rot = (Math.PI*2/segs)*i;
+        const x1 = cx + Math.cos(angle+rot)*r*0.15;
+        const y1 = cy + Math.sin(angle+rot)*r*0.15;
+        const x2 = cx + Math.cos(angle+rot)*r;
+        const y2 = cy + Math.sin(angle+rot)*r;
+        actx.beginPath();
+        actx.moveTo(x1,y1);
+        actx.lineTo(x2,y2);
+        actx.stroke();
+      }
+    }
+  }
+
+  resizeCanvases();
+})();
+</script>
+</body>
+</html>
