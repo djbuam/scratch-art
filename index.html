@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Scratch_art — arte gerada por movimento</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Permanent+Marker&display=swap');
   :root{
     --bg: #121212;
     --panel: #1a1a1a;
@@ -18,10 +19,26 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-    font-family:'IBM Plex Mono', ui-monospace, Menlo, monospace;}
+    font-family:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    display:flex; flex-direction:column;}
   h1,h2,h3{font-family:'Barlow Condensed', Oswald, 'Arial Narrow', sans-serif;
     text-transform:uppercase; letter-spacing:0.04em; margin:0;}
-  .app{display:flex; height:100vh; overflow:hidden;}
+  .app{display:flex; flex:1; min-height:0; overflow:hidden;}
+
+  /* ---------- HERO HEADER ---------- */
+  .hero{
+    background:#1a1a1a; padding:26px 34px;
+    border-bottom:1px solid #000;
+    display:flex; justify-content:space-between; align-items:center;
+    gap:20px; flex-wrap:wrap;
+  }
+  .hero-logo img{display:block; height:52px; width:auto;}
+  .hero-lockup img{display:block; height:70px; width:auto;}
+  @media (max-width:640px){
+    .hero{padding:16px 18px;}
+    .hero-logo img{height:36px;}
+    .hero-lockup img{height:48px;}
+  }
 
   /* ---------- SIDEBAR ---------- */
   .side{
@@ -29,17 +46,10 @@
     padding:20px 18px; overflow-y:auto; border-right:1px solid #000;
     display:flex; flex-direction:column; gap:16px;
   }
-  .brand{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
-  .platter{
-    width:34px;height:34px;border-radius:50%;
-    background:repeating-radial-gradient(circle at center, #050505 0 2px, #222 2px 4px);
-    border:2px solid var(--groove); position:relative; flex:none;
-    animation: spin 6s linear infinite;
+  .side h2.instructions{
+    color:var(--led); font-size:20px; letter-spacing:.02em; font-weight:600;
+    text-transform:none; margin-bottom:2px;
   }
-  .platter::after{content:"";position:absolute;inset:13px;border-radius:50%;background:var(--paper);}
-  @keyframes spin{ to{ transform:rotate(360deg); } }
-  .brand h1{font-size:20px; line-height:1;}
-  .brand span{display:block; font-size:10px; color:var(--muted); letter-spacing:.12em; font-family:'IBM Plex Mono',monospace; text-transform:none; margin-top:2px;}
 
   .card{background:#151515; border:1px solid #000; border-radius:6px; padding:14px;}
   .card h3{font-size:12px; color:var(--muted); margin-bottom:10px; letter-spacing:.1em;}
@@ -93,17 +103,17 @@
 </style>
 </head>
 <body>
+
+<header class="hero">
+  <div class="hero-logo"><img src="assets/logo-mark.png" alt="Buam"></div>
+  <div class="hero-lockup"><img src="assets/logo-scratchart.png" alt="Scratch Art"></div>
+</header>
+
 <div class="app">
 
   <!-- SIDEBAR -->
   <div class="side">
-    <div class="brand">
-      <div class="platter"></div>
-      <div>
-        <h1>Scratch_art</h1>
-        <span>câmera → cor → movimento → giz</span>
-      </div>
-    </div>
+    <h2 class="instructions">Instruções:</h2>
 
     <div class="card">
       <h3>01 · Câmera</h3>
