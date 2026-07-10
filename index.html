@@ -149,11 +149,18 @@
       <div style="height:12px"></div>
       <label>Sensibilidade de cor (tolerância de matiz)</label>
       <input type="range" id="tol" min="5" max="60" value="22">
+      <div style="height:12px"></div>
+      <button id="calibCenter" class="calib-btn">
+        <span>Calibrar centro do disco</span>
+        <span class="swatch" id="swCenter" style="background:#666; border-color:#999"></span>
+      </button>
+      <div class="hint" style="margin-top:6px;">Necessário só pro modo "Giro" — clique aqui e depois clique no eixo/spindle do vinil na imagem da câmera.</div>
     </div>
 
     <div class="card">
       <h3>03 · Modo de desenho</h3>
       <select id="mode">
+        <option value="giro">Giro — arco seguindo a rotação</option>
         <option value="chalk">Giz — textura orgânica</option>
         <option value="trail">Traço — linha entre os pontos</option>
         <option value="particles">Partículas — jorro pela velocidade</option>
@@ -205,6 +212,8 @@
   const btnStart = document.getElementById('btnStart');
   const calib1 = document.getElementById('calib1');
   const calib2 = document.getElementById('calib2');
+  const calibCenter = document.getElementById('calibCenter');
+  const swCenter = document.getElementById('swCenter');
   const sw1 = document.getElementById('sw1');
   const sw2 = document.getElementById('sw2');
   const tolEl = document.getElementById('tol');
@@ -219,15 +228,16 @@
   const dotP2 = document.getElementById('dotP2');
   const fpsTag = document.getElementById('fpsTag');
 
-  let calibrating = null; // 1, 2, or null
+  let calibrating = null; // 1, 2, 'center', or null
   let target1 = {h:355, s:0.6, v:0.6, set:true};  // default reddish
   let target2 = {h:195, s:0.6, v:0.6, set:true};  // default blueish
+  let diskCenter = null; // {x,y} normalized 0..1
   let paused = false;
 
   // processing (downscaled) canvas
   const proc = document.createElement('canvas');
   const pctx = proc.getContext('2d', {willReadFrequently:true});
-  const PW = 160; let PH = 120;
+  const PW = 220; let PH = 165;
 
   function resizeCanvases(){
     art.width = art.clientWidth;
@@ -276,11 +286,19 @@
     calibrating = calibrating===1 ? null : 1;
     calib1.classList.toggle('active', calibrating===1);
     calib2.classList.remove('active');
+    calibCenter.classList.remove('active');
   });
   calib2.addEventListener('click', ()=>{
     calibrating = calibrating===2 ? null : 2;
     calib2.classList.toggle('active', calibrating===2);
     calib1.classList.remove('active');
+    calibCenter.classList.remove('active');
+  });
+  calibCenter.addEventListener('click', ()=>{
+    calibrating = calibrating==='center' ? null : 'center';
+    calibCenter.classList.toggle('active', calibrating==='center');
+    calib1.classList.remove('active');
+    calib2.classList.remove('active');
   });
 
   overlay.addEventListener('click', (e)=>{
@@ -288,6 +306,14 @@
     const rect = overlay.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
+    if(calibrating==='center'){
+      diskCenter = {x, y};
+      swCenter.style.background = 'var(--led)';
+      prevAngle1 = null; // reset arc tracking so it doesn't jump
+      calibrating = null;
+      calibCenter.classList.remove('active');
+      return;
+    }
     // sample from the small proc canvas for consistency
     const px = Math.min(PW-1, Math.max(0, Math.floor(x*PW)));
     const py = Math.min(PH-1, Math.max(0, Math.floor(y*PH)));
@@ -310,6 +336,7 @@
     actx.fillStyle = '#f7f5f0';
     actx.fillRect(0,0,art.width,art.height);
     lastMidChalk = null;
+    prevAngle1 = null;
   });
   btnSave.addEventListener('click', ()=>{
     const link = document.createElement('a');
@@ -324,24 +351,35 @@
 
   // detection state
   let last1 = null, last2 = null;
+  let lostCount1 = 99, lostCount2 = 99;
   let vel1 = {x:0,y:0}, vel2 = {x:0,y:0};
   let hueAngle = 0;
   let lastMidChalk = null;
+  let prevAngle1 = null;
 
-  function findBlob(imgData, target, tol){
+  function findBlob(imgData, target, tol, roi){
     const d = imgData.data;
     let sx=0, sy=0, count=0;
     const w = imgData.width, h = imgData.height;
-    // sample every pixel of the small proc frame (cheap: 160x120)
-    for(let y=0; y<h; y+=1){
-      for(let x=0; x<w; x+=1){
+    let xStart=0, xEnd=w, yStart=0, yEnd=h;
+    if(roi){
+      xStart = Math.max(0, Math.floor((roi.x - roi.r) * w));
+      xEnd   = Math.min(w, Math.ceil((roi.x + roi.r) * w));
+      yStart = Math.max(0, Math.floor((roi.y - roi.r) * h));
+      yEnd   = Math.min(h, Math.ceil((roi.y + roi.r) * h));
+    }
+    for(let y=yStart; y<yEnd; y++){
+      for(let x=xStart; x<xEnd; x++){
         const i = (y*w+x)*4;
         const r=d[i], g=d[i+1], b=d[i+2];
         const hsv = rgbToHsv(r,g,b);
-        if(hsv.s < 0.35 || hsv.v < 0.22) continue; // ignore dull/dark pixels
-        if(hueDist(hsv.h, target.h) <= tol){
-          sx += x; sy += y; count++;
-        }
+        if(hsv.s < 0.22 || hsv.v < 0.14) continue; // ignore dull/dark pixels
+        if(hueDist(hsv.h, target.h) > tol) continue;
+        // exige que saturação e brilho também se pareçam com o alvo calibrado
+        // (isso é o que evita pele da mão "roubar" a detecção de um marcador vermelho/laranja)
+        if(Math.abs(hsv.s - target.s) > 0.32) continue;
+        if(Math.abs(hsv.v - target.v) > 0.38) continue;
+        sx += x; sy += y; count++;
       }
     }
     if(count < 4) return null;
@@ -375,8 +413,14 @@
 
       const frame = pctx.getImageData(0,0,PW,PH);
       const tol = parseFloat(tolEl.value);
-      const p1 = findBlob(frame, target1, tol);
-      const p2 = findBlob(frame, target2, tol);
+      const roi1 = (last1 && lostCount1 < 12) ? {x:last1.x, y:last1.y, r:0.22} : null;
+      const roi2 = (last2 && lostCount2 < 12) ? {x:last2.x, y:last2.y, r:0.22} : null;
+      let p1 = findBlob(frame, target1, tol, roi1);
+      if(!p1 && roi1) p1 = findBlob(frame, target1, tol, null); // perdeu no raio curto: procura o quadro todo
+      let p2 = findBlob(frame, target2, tol, roi2);
+      if(!p2 && roi2) p2 = findBlob(frame, target2, tol, null);
+      lostCount1 = p1 ? 0 : lostCount1+1;
+      lostCount2 = p2 ? 0 : lostCount2+1;
 
       dotP1.className = 'dot ' + (p1 ? 'on' : 'off');
       dotP2.className = 'dot ' + (p2 ? 'on' : 'off');
@@ -449,7 +493,36 @@
     const speed = Math.hypot(v1.x,v1.y)+Math.hypot(v2.x,v2.y);
     const hue = (angle*180/Math.PI + 360) % 360;
 
-    if(mode === 'chalk'){
+    if(mode === 'giro' && diskCenter){
+      const center = toCanvasXY(diskCenter);
+      const angle1 = Math.atan2(a.y-center.y, a.x-center.x);
+      const radius1 = Math.hypot(a.x-center.x, a.y-center.y);
+      if(prevAngle1 !== null && radius1 > 2){
+        let delta = angle1 - prevAngle1;
+        while(delta > Math.PI) delta -= Math.PI*2;
+        while(delta < -Math.PI) delta += Math.PI*2;
+        if(Math.abs(delta) > 0.001 && Math.abs(delta) < Math.PI*0.9){
+          actx.strokeStyle = `hsl(${hue}, 70%, 45%)`;
+          actx.lineWidth = Math.max(1, thick + speed*400);
+          actx.lineCap = 'round';
+          actx.beginPath();
+          actx.arc(center.x, center.y, radius1, prevAngle1, prevAngle1+delta, delta<0);
+          actx.stroke();
+        }
+      }
+      prevAngle1 = angle1;
+
+    } else if(mode === 'giro'){
+      // sem centro calibrado ainda: cai pro comportamento de traço reto
+      actx.strokeStyle = `hsl(${hue}, 70%, 45%)`;
+      actx.lineWidth = Math.max(1, thick + speed*400);
+      actx.lineCap = 'round';
+      actx.beginPath();
+      actx.moveTo(a.x,a.y);
+      actx.lineTo(b.x,b.y);
+      actx.stroke();
+
+    } else if(mode === 'chalk'){
       const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
       if(!lastMidChalk) lastMidChalk = {x:mx, y:my};
       const baseWidth = Math.max(5, thick*4 + speed*700);
